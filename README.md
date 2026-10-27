@@ -33,3 +33,20 @@ If you use this code or data for your own work, please cite:
     	month_numeric = {11}
 }
 ```
+## Docker
+
+```bash
+docker build -t tf14_py35 .
+docker run --gpus all -it \
+    -v "$(pwd):/workspace" \
+	-v "$HOME/data:$HOME/data" \
+    -w /workspace \
+    tf14_py35
+```
+Verify
+```python
+python -c "import tensorflow as tf; print(tf.__version__)"
+python -c "import cv2; print(cv2.__version__)"
+python -c "import quaternion"
+python -c "import numba; print(numba.__version__)"
+```
