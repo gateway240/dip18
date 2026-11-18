@@ -20,7 +20,7 @@ import json
 import pickle
 import importlib
 
-from constants import Constants
+from train_and_eval.constants import Constants
 C = Constants()
 
 
@@ -38,9 +38,9 @@ class Configuration(object):
         if not("seed" in self.config):
             self.config['seed'] = C.SEED
 
-        models = importlib.import_module('tf_models')
+        models = importlib.import_module('train_and_eval.tf_models')
         self.model_cls = getattr(models, self.config.get('model_cls'))
-        datasets = importlib.import_module('dataset')
+        datasets = importlib.import_module('train_and_eval.dataset')
         self.dataset_cls = getattr(datasets, self.config.get('dataset_cls'))
 
         self.data_dir = None

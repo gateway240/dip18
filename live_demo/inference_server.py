@@ -15,6 +15,8 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
+from pathlib import Path
+import sys
 import os
 import socket
 import tensorflow as tf
@@ -27,9 +29,9 @@ import pickle as pkl
 import datetime
 
 from threading import Thread
-from configuration import Configuration
-from constants import Constants
-from utils import SMPL_NR_JOINTS, smpl_reduced_to_full
+from train_and_eval.configuration import Configuration
+from train_and_eval.constants import Constants
+from train_and_eval.utils import SMPL_NR_JOINTS, smpl_reduced_to_full
 
 
 # TODO adjust these parameters if necessary

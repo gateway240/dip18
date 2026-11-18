@@ -17,7 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 import numpy as np
 import tensorflow as tf
-from constants import Constants
+from train_and_eval.constants import Constants
 
 C = Constants()
 

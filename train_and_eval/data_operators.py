@@ -16,7 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 import numpy as np
-from constants import Constants
+from train_and_eval.constants import Constants
 C = Constants()
 
 

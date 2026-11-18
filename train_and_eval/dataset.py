@@ -27,8 +27,8 @@ The way the data is passed is not restricted. A child class can read the data fr
 import numpy as np
 import tensorflow as tf
 
-from constants import Constants
-from data_operators import Operator
+from train_and_eval.constants import Constants
+from train_and_eval.data_operators import Operator
 
 C = Constants()
 

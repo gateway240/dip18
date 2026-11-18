@@ -49,4 +49,8 @@ python -c "import tensorflow as tf; print(tf.__version__)"
 python -c "import cv2; print(cv2.__version__)"
 python -c "import quaternion"
 python -c "import numba; print(numba.__version__)"
+
+# Need to run it this way for so the Python paths work
+python -m live_demo.inference_server
+python -m live_demo.example
 ```

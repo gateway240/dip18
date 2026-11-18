@@ -37,6 +37,7 @@ RUN pip install \
     numba==0.47.0 \
     numpy-quaternion==2019.12.11.22.25.52 \
     numpy~=1.15 \
-    scipy
+    scipy \ 
+    torch
 
 CMD ["/bin/bash"]

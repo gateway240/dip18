@@ -24,16 +24,23 @@ be constructed by inheriting from this vanilla architecture.
 Note that different modes (i.e., training, validation, sampling) should be implemented as different graphs by reusing
 the parameters. Therefore, validation functionality shouldn't be used by a model with training mode.
 """
-import tensorflow as tf
-import numpy as np
+import copy
+import math
 import sys
 import time
-import math
-import copy
 
-import tf_model_utils
-from tf_model_utils import get_reduce_loss_func, get_rnn_cell, linear, fully_connected_layer, get_activation_fn
-from constants import Constants
+import numpy as np
+import tensorflow as tf
+
+from train_and_eval.constants import Constants
+from train_and_eval.tf_model_utils import (
+    fully_connected_layer,
+    get_activation_fn,
+    get_reduce_loss_func,
+    get_rnn_cell,
+    linear,
+    logli_normal_isotropic,
+)
 
 C = Constants()
 
@@ -187,7 +194,7 @@ class BaseTemporalModel(object):
                     with tf.name_scope(loss_type):
                         # Negative log likelihood loss.
                         if loss_type == C.NLL_NORMAL:
-                            logli_term = tf_model_utils.logli_normal_isotropic(self.target_pieces[idx],
+                            logli_term = logli_normal_isotropic(self.target_pieces[idx],
                                                                                self.ops_model_output[C.OUT_MU],
                                                                                self.ops_model_output[C.OUT_SIGMA])
                         elif loss_type == C.MSE:
@@ -210,7 +217,7 @@ class BaseTemporalModel(object):
                     with tf.name_scope(loss_key):
                         # Negative log likelihood loss.
                         if loss_type == C.NLL_NORMAL:
-                            logli_term = tf_model_utils.logli_normal_isotropic(self.target_pieces[target_idx],
+                            logli_term = logli_normal_isotropic(self.target_pieces[target_idx],
                                                                                self.ops_model_output[
                                                                                    out_key + C.SUF_MU],
                                                                                self.ops_model_output[out_key + C.SUF_SIGMA])
