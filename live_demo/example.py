@@ -12,10 +12,12 @@ from train_and_eval.tf_model_utils import *
 from train_and_eval.tf_models import *
 from train_and_eval.utils import SMPL_NR_JOINTS, smpl_reduced_to_full
 
-MODEL_DIR = "train_and_eval/models/tf-1528208085-fine_tuning-imu_v9-birnn-fc1_512-lstm2_512-idrop2-relu-norm_" \
-            "ori_acc_smpl-auxloss_acc"
+MODEL_DIR = (
+    "train_and_eval/models/tf-1528208085-fine_tuning-imu_v9-birnn-fc1_512-lstm2_512-idrop2-relu-norm_"
+    "ori_acc_smpl-auxloss_acc"
+)
 
-DATA_DIR = Path("./live_demo/data") 
+DATA_DIR = Path("./live_demo/data")
 motion = "walking"
 frame_start = 400
 frame_end = 1500
@@ -23,65 +25,77 @@ frame_end = 1500
 PELVIS_IDX = 5
 CAL_FRAMES = 60  # 1
 
-R_body = torch.tensor([
-    [ 0, -1, 0],
-    [ 1,  0, 0],
-    [ 0,  0, 1],
-], dtype=torch.float32)
+R_body = torch.tensor(
+    [
+        [0, -1, 0],
+        [1, 0, 0],
+        [0, 0, 1],
+    ],
+    dtype=torch.float32,
+)
 
 LEN_PAST_FRAMES = 20
 LEN_FUTURE_FRAMES = 5
 
 tracked_joints = [
-    18, # LELBOW
-    19, # RELBOW
-    4, # LKNEE
-    5, # RKNEE
-    15, # HEAD
-    0, # PELVIS
+    18,  # LELBOW
+    19,  # RELBOW
+    4,  # LKNEE
+    5,  # RKNEE
+    15,  # HEAD
+    0,  # PELVIS
 ]
 
 C = Constants()
-SYSTEM = 'local'
+SYSTEM = "local"
+
 
 def load_model(sess, model_dir):
     """Load the specified model into the given Tensorflow session."""
-    config_dict = Configuration.from_json(os.path.abspath(os.path.join(model_dir, "config.json")))
+    config_dict = Configuration.from_json(
+        os.path.abspath(os.path.join(model_dir, "config.json"))
+    )
 
     config_dict["system"] = SYSTEM
     config = Configuration(**config_dict)
-    config.set('eval_dir', os.path.join(model_dir, "evaluation"), override=True)
-    config.set('model_dir', model_dir, override=True)
+    config.set("eval_dir", os.path.join(model_dir, "evaluation"), override=True)
+    config.set("model_dir", model_dir, override=True)
 
-    if not os.path.exists(config.get('eval_dir')):
-        os.makedirs(config.get('eval_dir'))
+    if not os.path.exists(config.get("eval_dir")):
+        os.makedirs(config.get("eval_dir"))
 
     data_placeholders = dict()
-    data_placeholders[C.PL_INPUT] = tf.placeholder(tf.float32, shape=[1, None, C.SIZE_ORI+C.SIZE_ACC])
-    data_placeholders[C.PL_TARGET] = tf.placeholder(tf.float32, shape=[1, None, C.SIZE_SMPL])
+    data_placeholders[C.PL_INPUT] = tf.placeholder(
+        tf.float32, shape=[1, None, C.SIZE_ORI + C.SIZE_ACC]
+    )
+    data_placeholders[C.PL_TARGET] = tf.placeholder(
+        tf.float32, shape=[1, None, C.SIZE_SMPL]
+    )
     data_placeholders[C.PL_SEQ_LEN] = tf.placeholder(tf.int32, shape=[1])
 
     # Load data statistics
-    stat_path = os.path.join(config.get('model_dir'), "stats.npz")
+    stat_path = os.path.join(config.get("model_dir"), "stats.npz")
     assert os.path.exists(stat_path), "Data statistics file is required."
     stats = dict(np.load(stat_path, allow_pickle=True))
 
     # Create Model
     model_cls = config.model_cls
-    model = model_cls(config=config,
-                      session=sess,
-                      reuse=False,
-                      mode="sampling",
-                      placeholders=data_placeholders,
-                      input_dims=[C.SIZE_ORI + C.SIZE_ACC],
-                      target_dims=[C.SIZE_SMPL],
-                      data_stats=stats)
+    model = model_cls(
+        config=config,
+        session=sess,
+        reuse=False,
+        mode="sampling",
+        placeholders=data_placeholders,
+        input_dims=[C.SIZE_ORI + C.SIZE_ACC],
+        target_dims=[C.SIZE_SMPL],
+        data_stats=stats,
+    )
     model.build_graph()
 
     # Restore weights
     try:
         saver = tf.train.Saver()
-        checkpoint_path = tf.train.latest_checkpoint(config.get('model_dir'))
+        checkpoint_path = tf.train.latest_checkpoint(config.get("model_dir"))
 
         print("Loading model " + checkpoint_path)
         saver.restore(sess, checkpoint_path)
@@ -105,6 +119,7 @@ def normalize_tensor(x: torch.Tensor, dim=-1, return_norm=False):
     normalized_x = x / norm
     return normalized_x if not return_norm else (normalized_x, norm)
 
+
 def quaternion_to_rotation_matrix(q: torch.Tensor):
     r"""
     Turn (unnormalized) quaternions wxyz into rotation matrices. (torch, batch)
@@ -114,10 +129,22 @@ def quaternion_to_rotation_matrix(q: torch.Tensor):
     """
     q = normalize_tensor(q.view(-1, 4))
     a, b, c, d = q[:, 0:1], q[:, 1:2], q[:, 2:3], q[:, 3:4]
-    r = torch.cat((- 2 * c * c - 2 * d * d + 1, 2 * b * c - 2 * a * d, 2 * a * c + 2 * b * d,
-                   2 * b * c + 2 * a * d, - 2 * b * b - 2 * d * d + 1, 2 * c * d - 2 * a * b,
-                   2 * b * d - 2 * a * c, 2 * a * b + 2 * c * d, - 2 * b * b - 2 * c * c + 1), dim=1)
+    r = torch.cat(
+        (
+            -2 * c * c - 2 * d * d + 1,
+            2 * b * c - 2 * a * d,
+            2 * a * c + 2 * b * d,
+            2 * b * c + 2 * a * d,
+            -2 * b * b - 2 * d * d + 1,
+            2 * c * d - 2 * a * b,
+            2 * b * d - 2 * a * c,
+            2 * a * b + 2 * c * d,
+            -2 * b * b - 2 * c * c + 1,
+        ),
+        dim=1,
+    )
     return r.view(-1, 3, 3)
+
 
 def normalize(orientations, accelerations, root_idx, first_only=False):
     """
@@ -166,12 +193,12 @@ def make_calibration_pose(num_frames: int = 1) -> torch.Tensor:
     )
 
     left_elbow_bend = torch.tensor(
-        Rotation.from_euler("xy", [-20,-10], degrees=True).as_matrix(),
+        Rotation.from_euler("xy", [-20, -10], degrees=True).as_matrix(),
         dtype=torch.float32,
     )
 
     right_elbow_bend = torch.tensor(
-        Rotation.from_euler("xy", [-20,10], degrees=True).as_matrix(),
+        Rotation.from_euler("xy", [-20, 10], degrees=True).as_matrix(),
         dtype=torch.float32,
     )
 
@@ -208,7 +235,7 @@ model = load_model(sess, MODEL_DIR)
 buffer_size = LEN_PAST_FRAMES + 1 + LEN_FUTURE_FRAMES
 input_buffer_size = LEN_FUTURE_FRAMES + 1
 
-print("Buffer size: ",buffer_size)
+print("Buffer size: ", buffer_size)
 buffer = []
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -236,20 +263,19 @@ ori_rot = torch.stack(
 )
 
 R_var = R_body
-R_fix = torch.stack([
-    R_var,   # radius_l_imu
-    R_var,   # radius_r_imu
-    R_var,  # tibia_l_imu
-    R_var,  # tibia_r_imu
-    R_var,  # head_imu
-    R_var,  # pelvis_imu
-]).to(ori_rot.device)
+R_fix = torch.stack(
+    [
+        R_var,  # radius_l_imu
+        R_var,  # radius_r_imu
+        R_var,  # tibia_l_imu
+        R_var,  # tibia_r_imu
+        R_var,  # head_imu
+        R_var,  # pelvis_imu
+    ]
+).to(ori_rot.device)
 
 ori_rot = ori_rot @ R_fix
-acc_raw = torch.matmul(
-    acc_raw.unsqueeze(-2),
-    R_fix.unsqueeze(0)
-).squeeze(-2)
+acc_raw = torch.matmul(acc_raw.unsqueeze(-2), R_fix.unsqueeze(0)).squeeze(-2)
 
 # Calibration frame
 ori_cal = ori_raw[:CAL_FRAMES].mean(dim=0)
@@ -274,7 +300,6 @@ preds = []
 oris = []
 accs = []
 for i in range(len(ori_rot)):
-
     # for j in range(buffer_size):
     #     # print("In loop with i=",i)
     #     # imu_m = buffer[i]
@@ -285,60 +310,118 @@ for i in range(len(ori_rot)):
 # acc = acc_raw[np.newaxis, :]
 ori = np.concatenate(oris, axis=0)
 acc = np.concatenate(accs, axis=0)
-    # print(ori.shape)
-    # print(acc.shape)
+# print(ori.shape)
+# print(acc.shape)
 
-    # model_io = {'input_ori': np.copy(ori),
-    #             'input_acc': np.copy(acc)}
+# model_io = {'input_ori': np.copy(ori),
+#             'input_acc': np.copy(acc)}
 
-    # normalize w.r.t. root sensor
+# normalize w.r.t. root sensor
 root_idx = 5
 ori_n, acc_n = normalize(ori, acc, root_idx)
 
 # get the prediction from the model, previous state unused
-pred, _, x_input = model.inference_step(ori_n, acc_n, previous_state=None)  # (seq_length, dof)
+pred, _, x_input = model.inference_step(
+    ori_n, acc_n, previous_state=None
+)  # (seq_length, dof)
 
-    # if i % 100 == 0:
-    #     print("GOT A PREDICTION FROM THE MODEL i=", i)
-    # print(pred)
+# if i % 100 == 0:
+#     print("GOT A PREDICTION FROM THE MODEL i=", i)
+# print(pred)
 
-    # print("pred before slice", pred.shape)
-    # print("ori before slice", ori.shape)
+# print("pred before slice", pred.shape)
+# print("ori before slice", ori.shape)
 
-    # pred = pred[-(LEN_FUTURE_FRAMES+1):-LEN_FUTURE_FRAMES]
-    # ori = ori[-(LEN_FUTURE_FRAMES+1):-LEN_FUTURE_FRAMES]
+# pred = pred[-(LEN_FUTURE_FRAMES+1):-LEN_FUTURE_FRAMES]
+# ori = ori[-(LEN_FUTURE_FRAMES+1):-LEN_FUTURE_FRAMES]
 
-    # print("pred after slice", pred.shape)
-    # print("ori after slice", ori.shape)
-    # model_io['output_actual'] = np.copy(pred)
-print(pred.shape)
+# print("pred after slice", pred.shape)
+# print("ori after slice", ori.shape)
+# model_io['output_actual'] = np.copy(pred)
+# print(pred.shape)
 
 # Flatten ori
 # ori = ori.reshape(ori.shape[0], -1)   # (1, 54)
 
 # root_ori = ori[:, 9 * root_idx:9 * (root_idx + 1)]
 root_ori = ori[:, root_idx].reshape(-1, 9)
-
+print("Original pred shape: ", pred.shape)
 # add unused joints
 prediction = smpl_reduced_to_full(pred)
 # print(prediction)
-# print(prediction.shape)
+print("Prediction shape: ", prediction.shape)
 
 # replace root with root input sensor value
 prediction[:, 0:9] = root_ori
 
+
 # # end = time.time()
 
 # # convert to angle axis
-prediction = prediction.reshape(-1, SMPL_NR_JOINTS, 3, 3)
+
+# Expected shape
+# trans (2751, 3)
+n_frames = len(prediction)
+
+# identity = np.repeat(np.eye(3, 3)[np.newaxis, ...], 1, axis=0)
+# identity_flat = np.reshape(identity, [-1, 9]) * n_frames
+# print("Identity", identity_flat.shape)
+# pred = np.column_stack((pred, identity_flat))
+# prediction = np.delete(prediction, np.s_[156:], 1 )
+blank_3 = np.array([[0., 0., 0.],] * n_frames)
+prediction = np.column_stack((blank_3,prediction))
+print("New pred shape: ", prediction.shape)
+# print("N frames: ", n_frames)
+# Trick from: https://stackoverflow.com/a/1550137
+trans = np.array([[0., 0., 0.],] * n_frames)
+# trans = np.repeat(trans_0, n_frames, axis=0)
+# print("Trans shape:", trans.shape)
+# gender ()
+gender = "male"
+# mocap_framerate ()
+mocap_framerate = 60.
+# betas (16,)
+# From SMPL2AddBiomechanics repo
+betas = [
+    -0.2627612,
+    1.47132885,
+    -0.31743591,
+    0.32307386,
+    0.69473532,
+    0.06988167,
+    1.15463818,
+    -2.03527317,
+    1.25517997,
+    -0.96329528,
+    -0.62346964,
+    0.73335359,
+    0.54041496,
+    0.63366898,
+    -0.25407558,
+    0.57630826,
+]
+# dmpls (2751, 8)
+# poses (2751, 156)
+poses = prediction
+print("Poses shape: ",poses.shape)
+np.savez(
+    DATA_DIR / "{}_smpl_pose.npz".format(motion),  # noqa: UP032
+    trans=trans,
+    gender=gender,
+    mocap_framerate=mocap_framerate,
+    betas=betas,
+    poses=poses,
+)
+# prediction = prediction.reshape(-1, SMPL_NR_JOINTS, 3, 3)
+
 # preds.append(prediction)
-    # print(prediction)
-    # print(prediction.shape)
-    # prediction_aa = quaternion.as_rotation_vector(quaternion.from_rotation_matrix(prediction))
-    # prediction_aa = np.reshape(prediction_aa, [-1])
+# print(prediction)
+# print(prediction.shape)
+# prediction_aa = quaternion.as_rotation_vector(quaternion.from_rotation_matrix(prediction))
+# prediction_aa = np.reshape(prediction_aa, [-1])
 # preds_out = np.array(preds)
 # print(preds_out)
 # print(preds_out.shape)
-print(prediction.shape)
+# print(prediction.shape)
 
-torch.save(prediction,str(DATA_DIR / "{}_smpl_pose.pt".format(motion)))  # noqa: UP032
+# torch.save(prediction, str(DATA_DIR / "{}_smpl_pose.pt".format(motion)))  # noqa: UP032

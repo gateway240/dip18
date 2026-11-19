@@ -24,7 +24,8 @@ import cv2
 
 
 SMPL_MAJOR_JOINTS = [1, 2, 3, 4, 5, 6, 9, 12, 13, 14, 15, 16, 17, 18, 19]
-SMPL_NR_JOINTS = 24
+SMPL_NR_JOINTS = 17
+# SMPL_NR_JOINTS = 24
 SMPL_PARENTS = [-1, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 12, 13, 14, 16, 17, 18, 19, 20, 21]
 
 
