@@ -18,7 +18,7 @@ MODEL_DIR = "train_and_eval/models/tf-1528208085-fine_tuning-imu_v9-birnn-fc1_51
 DATA_DIR = Path("./live_demo/data") 
 motion = "walking"
 frame_start = 400
-frame_end = 1000
+frame_end = 1500
 
 PELVIS_IDX = 5
 CAL_FRAMES = 60  # 1
@@ -279,8 +279,8 @@ for i in range(len(ori_rot)):
     #     # print("In loop with i=",i)
     #     # imu_m = buffer[i]
     #     # print(ori_rot[i])
-    oris.append(np.array(ori_rot[i])[np.newaxis, :])
-    accs.append(np.array(acc_raw[i])[np.newaxis, :])
+    oris.append(np.array(ori_in[i])[np.newaxis, :])
+    accs.append(np.array(acc_in[i])[np.newaxis, :])
 # ori = ori_rot[np.newaxis, :]
 # acc = acc_raw[np.newaxis, :]
 ori = np.concatenate(oris, axis=0)
