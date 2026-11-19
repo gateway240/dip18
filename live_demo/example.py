@@ -5,6 +5,7 @@ import numpy as np
 import quaternion
 import tensorflow as tf
 import torch
+from scipy.spatial.transform import Rotation
 from train_and_eval.configuration import Configuration
 from train_and_eval.constants import Constants
 from train_and_eval.tf_model_utils import *
@@ -19,6 +20,9 @@ motion = "walking"
 frame_start = 400
 frame_end = 1000
 
+PELVIS_IDX = 5
+CAL_FRAMES = 60  # 1
+
 R_body = torch.tensor([
     [ 0, -1, 0],
     [ 1,  0, 0],
@@ -27,6 +31,15 @@ R_body = torch.tensor([
 
 LEN_PAST_FRAMES = 20
 LEN_FUTURE_FRAMES = 5
+
+tracked_joints = [
+    18, # LELBOW
+    19, # RELBOW
+    4, # LKNEE
+    5, # RKNEE
+    15, # HEAD
+    0, # PELVIS
+]
 
 C = Constants()
 SYSTEM = 'local'
@@ -139,6 +152,51 @@ def normalize(orientations, accelerations, root_idx, first_only=False):
     return oris_normalized, accs_normalized
 
 
+def make_calibration_pose(num_frames: int = 1) -> torch.Tensor:
+    pose = torch.eye(3).repeat(num_frames, 24, 1, 1)
+
+    left_arm_down = torch.tensor(
+        Rotation.from_euler("z", -85, degrees=True).as_matrix(),
+        dtype=torch.float32,
+    )
+
+    right_arm_down = torch.tensor(
+        Rotation.from_euler("z", 85, degrees=True).as_matrix(),
+        dtype=torch.float32,
+    )
+
+    left_elbow_bend = torch.tensor(
+        Rotation.from_euler("xy", [-20,-10], degrees=True).as_matrix(),
+        dtype=torch.float32,
+    )
+
+    right_elbow_bend = torch.tensor(
+        Rotation.from_euler("xy", [-20,10], degrees=True).as_matrix(),
+        dtype=torch.float32,
+    )
+
+    pose[:, 16] = left_arm_down
+    pose[:, 17] = right_arm_down
+
+    pose[:, 18] = left_elbow_bend
+    pose[:, 19] = right_elbow_bend
+
+    # left_wrist_bend = torch.tensor(
+    #     Rotation.from_euler("x", 30, degrees=True).as_matrix(),
+    #     dtype=torch.float32,
+    # )
+
+    # right_wrist_bend = torch.tensor(
+    #     Rotation.from_euler("x", -30, degrees=True).as_matrix(),
+    #     dtype=torch.float32,
+    # )
+
+    # pose[:, SMPLJoint.LWRIST] = left_wrist_bend
+    # pose[:, SMPLJoint.RWRIST] = right_wrist_bend
+
+    return pose
+
+
 ## START MAIN PROGRAM
 # if __name__ == '__main__':
 print("Starting IMU processing!")
@@ -163,6 +221,9 @@ ori_raw = torch.load(str(DATA_DIR / ("{}_orientations.pt".format(motion))))  # n
 
 acc_raw = acc_raw[frame_start:frame_end]
 ori_raw = ori_raw[frame_start:frame_end]
+
+pose_cal = make_calibration_pose(1)[0]  # (24,3,3)
+R_bone_cal = pose_cal[tracked_joints]  # (6,3,3)
 
 num_frames = ori_raw.shape[0]
 
@@ -190,20 +251,40 @@ acc_raw = torch.matmul(
     R_fix.unsqueeze(0)
 ).squeeze(-2)
 
-dynamic_buffer_size = len(ori_rot)
-# oris = []
-# accs = []
+# Calibration frame
+ori_cal = ori_raw[:CAL_FRAMES].mean(dim=0)
+acc_cal = acc_raw[:CAL_FRAMES].mean(dim=0)
+R_ori_cal = quaternion_to_rotation_matrix(ori_cal.reshape(-1, 4)).view(6, 3, 3)
+R_ori_cal = R_ori_cal @ R_fix
+smpl2imu = R_ori_cal[PELVIS_IDX].T
+print(smpl2imu)
+
+device2bone = smpl2imu.matmul(R_ori_cal).transpose(1, 2).matmul(R_bone_cal)
+acc_offsets = smpl2imu.matmul(
+    acc_cal.unsqueeze(-1)
+)  # [num_imus, 3, 1], already in global inertial frame
+
+print(device2bone.shape)
+print(acc_offsets.shape)
+
+acc_in = (smpl2imu.matmul(acc_raw.unsqueeze(-1)) - acc_offsets.unsqueeze(0)).squeeze(-1)
+# torch.save(acc_in.cpu(),os.path.join(paths.example_dir, f"{motion}_cal_accelerations.pt"))
+ori_in = smpl2imu.matmul(ori_rot).matmul(device2bone)
 preds = []
-for i in range(dynamic_buffer_size):
-    # print("In loop with i=",i)
-    # imu_m = buffer[i]
-    # print(ori_rot[i])
-    # oris.append(np.array(ori_rot[i])[np.newaxis, :])
-    # accs.append(np.array(acc_raw[i])[np.newaxis, :])
-    ori = ori_rot[i][np.newaxis, :]
-    acc = acc_raw[i][np.newaxis, :]
-    # ori = np.concatenate(oris, axis=0)
-    # acc = np.concatenate(accs, axis=0)
+oris = []
+accs = []
+for i in range(len(ori_rot)):
+
+    # for j in range(buffer_size):
+    #     # print("In loop with i=",i)
+    #     # imu_m = buffer[i]
+    #     # print(ori_rot[i])
+    oris.append(np.array(ori_rot[i])[np.newaxis, :])
+    accs.append(np.array(acc_raw[i])[np.newaxis, :])
+# ori = ori_rot[np.newaxis, :]
+# acc = acc_raw[np.newaxis, :]
+ori = np.concatenate(oris, axis=0)
+acc = np.concatenate(accs, axis=0)
     # print(ori.shape)
     # print(acc.shape)
 
@@ -211,14 +292,14 @@ for i in range(dynamic_buffer_size):
     #             'input_acc': np.copy(acc)}
 
     # normalize w.r.t. root sensor
-    root_idx = 5
-    ori_n, acc_n = normalize(ori, acc, root_idx)
+root_idx = 5
+ori_n, acc_n = normalize(ori, acc, root_idx)
 
-    # get the prediction from the model, previous state unused
-    pred, _, x_input = model.inference_step(ori_n, acc_n, previous_state=None)  # (seq_length, dof)
+# get the prediction from the model, previous state unused
+pred, _, x_input = model.inference_step(ori_n, acc_n, previous_state=None)  # (seq_length, dof)
 
-    if i % 100 == 0:
-        print("GOT A PREDICTION FROM THE MODEL i=", i)
+    # if i % 100 == 0:
+    #     print("GOT A PREDICTION FROM THE MODEL i=", i)
     # print(pred)
 
     # print("pred before slice", pred.shape)
@@ -230,33 +311,34 @@ for i in range(dynamic_buffer_size):
     # print("pred after slice", pred.shape)
     # print("ori after slice", ori.shape)
     # model_io['output_actual'] = np.copy(pred)
-    # print(pred.shape)
+print(pred.shape)
 
-    # Flatten ori
-    ori = ori.reshape(ori.shape[0], -1)   # (1, 54)
+# Flatten ori
+# ori = ori.reshape(ori.shape[0], -1)   # (1, 54)
 
-    root_ori = ori[:, 9 * root_idx:9 * (root_idx + 1)]
-    
+# root_ori = ori[:, 9 * root_idx:9 * (root_idx + 1)]
+root_ori = ori[:, root_idx].reshape(-1, 9)
 
-    # add unused joints
-    prediction = smpl_reduced_to_full(pred)
-    # print(prediction)
-    # print(prediction.shape)
+# add unused joints
+prediction = smpl_reduced_to_full(pred)
+# print(prediction)
+# print(prediction.shape)
 
-    # replace root with root input sensor value
-    prediction[:, 0:9] = root_ori
+# replace root with root input sensor value
+prediction[:, 0:9] = root_ori
 
-    # # end = time.time()
+# # end = time.time()
 
-    # # convert to angle axis
-    prediction = np.reshape(prediction, [SMPL_NR_JOINTS, 3, 3])
-    preds.append(prediction)
+# # convert to angle axis
+prediction = prediction.reshape(-1, SMPL_NR_JOINTS, 3, 3)
+# preds.append(prediction)
     # print(prediction)
     # print(prediction.shape)
     # prediction_aa = quaternion.as_rotation_vector(quaternion.from_rotation_matrix(prediction))
     # prediction_aa = np.reshape(prediction_aa, [-1])
-preds_out = np.array(preds)
-print(preds_out)
-print(preds_out.shape)
+# preds_out = np.array(preds)
+# print(preds_out)
+# print(preds_out.shape)
+print(prediction.shape)
 
-torch.save(preds_out,str(DATA_DIR / "{}_smpl_pose.pt".format(motion)))  # noqa: UP032
+torch.save(prediction,str(DATA_DIR / "{}_smpl_pose.pt".format(motion)))  # noqa: UP032
